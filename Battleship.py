@@ -39,7 +39,9 @@ def max3(x,y,z):
 ##Models
 ##Model loader
 def loadOBJModel(path,texture):
-	texture = PhotoImage(file=path)
+	m = Model()
+	m.texture = PhotoImage(file=path)
+
 	pass
 ##3d renderable model in the scene
 class Model():
@@ -48,6 +50,7 @@ class Model():
 		self.vertices = []
 		self.indices = []
 		self.textureCoords = []
+		self.texture = None
 
 	##Load screen coordinates of triangles
 	def loadCoords(self,coords):
@@ -75,54 +78,76 @@ def convertCoord(coord):
 	coord.y = (0.5 * screenHeight) - (coord.y * 0.5 * screenHeight)
 	return coord
 
-##Rasterize a single triangle
-def drawTriangle(img,v0,v1,v2):
-
-	##Calculate bounding rectange
-	minx = int(min3(v0.x,v1.x,v2.x))
-	maxx = int(max3(v0.x,v1.x,v2.x))
-	miny = int(min3(v0.y,v1.y,v2.y))
-	maxy = int(max3(v0.y,v1.y,v2.y))
-
-	##Assign X constants
-	c1x = v1.x - v0.x
-	c2x = v2.x - v1.x
-	c3x = v0.x - v2.x
-
-	##Assign Y constants
-	c1y = v1.y - v0.y
-	c2y = v2.y - v1.y
-	c3y = v0.y - v2.y
-
-	##Prepare the space in memory to be used
-	cy1 = 0
-	cy2 = 0
-	cy3 = 0
-
-	cx1 = 0
-	cx2 = 0
-	cx3 = 0
-
-	##Iterate through the bounding rectangle
-	for y in range(miny,maxy):
-		cy1 = c1x * (y - v0.y)
-		cy2 = c2x * (y - v1.y)
-		cy3 = c3x * (y - v2.y)
-
-		for x in range(minx,maxx):
-			cx1 = c1y * (x - v0.x)
-			cx2 = c2y * (x - v1.x)
-			cx3 = c3y * (x - v2.x)
-			
-			##Check whether the point is within the triangle
-			if((cy1 <= cx1)and(cy2 <= cx2)and(cy3 <= cx3)):
-				##colour in a pixel
-				img.put("#ffffff",(x,y))
-
 class Renderer():
 	##Rasterizer constructor
 	def __init__(self):
 		self.models = []
+	
+	def setPixel(self,x,y,r,g,b)
+	{
+		self.img.put("#%02x%02x%02x" % (r,g,b),(x,y))
+	}
+
+	##Rasterize a single triangle
+	def drawTriangle(self,v0,v1,v2):
+
+		##Calculate bounding rectange
+		minx = int(min3(v0.x,v1.x,v2.x))
+		maxx = int(max3(v0.x,v1.x,v2.x))
+		miny = int(min3(v0.y,v1.y,v2.y))
+		maxy = int(max3(v0.y,v1.y,v2.y))
+
+		##Assign X constants
+		c1x = v1.x - v0.x
+		c2x = v2.x - v1.x
+		c3x = v0.x - v2.x
+
+		##Assign Y constants
+		c1y = v1.y - v0.y
+		c2y = v2.y - v1.y
+		c3y = v0.y - v2.y
+
+		##Prepare the space in memory to be used
+		cy1 = 0
+		cy2 = 0
+		cy3 = 0
+
+		cx1 = 0
+		cx2 = 0
+		cx3 = 0
+
+		##Prepare the space in memory for baryocentric coordinates
+		##used to compute the z buffer
+		zArea = ((v1.x - v0.x) * (v2.y - v0.y) - (v1.y - v0.y) * (v2.x - v0.x))
+		z0 = 0
+		z1 = 0
+		z2 = 0
+
+		##Iterate through the bounding rectangle
+		for y in range(miny,maxy):
+			cy1 = c1x * (y - v0.y)
+			cy2 = c2x * (y - v1.y)
+			cy3 = c3x * (y - v2.y)
+
+			for x in range(minx,maxx):
+				cx1 = c1y * (x - v0.x)
+				cx2 = c2y * (x - v1.x)
+				cx3 = c3y * (x - v2.x)
+
+			
+				##Check whether the point is within the triangle
+				if((cy1 <= cx1)and(cy2 <= cx2)and(cy3 <= cx3)):
+					##Calculate baryocentric coordinates
+					cx1 /= -zArea
+					cx2 /= -zArea
+					cx3 /= -zArea
+
+					##Calculate the Z buffer
+					z = 1 / ((cx1 * v0.z) + (cx2 * v1.z) + (cx3 * v2.z))
+
+					##colour in a pixel
+					self.setPixel(x,y,255,255,255)
+
 
 	##Add a model to the renderer list
 	def loadModel(self,model):
@@ -141,7 +166,7 @@ class Renderer():
 	def renderIndices(self,model):
 		i = 0
 		while i < len(model.indices):
-			drawTriangle(self.img,model.vertices[model.indices[i]],model.vertices[model.indices[i+1]],model.vertices[model.indices[i+2]])
+			self.drawTriangle(model.vertices[model.indices[i]],model.vertices[model.indices[i+1]],model.vertices[model.indices[i+2]])
 			i += 3
 		pass
 
@@ -150,7 +175,7 @@ class Renderer():
 	def renderVectors(self,model):
 		i = 0
 		while i < len(model.vertices): 
-			drawTriangle(self.img,model.vertices[i],model.vertices[i+1],model.vertices[i+2])
+			self.drawTriangle(self.img,model.vertices[i],model.vertices[i+1],model.vertices[i+2])
 			i += 3
 
 	def renderModels(self):
@@ -158,7 +183,7 @@ class Renderer():
 
 
 ##Actual Game
-
+import time
 ##Enemy logic 
 ##(because you're SURELY going to play with friends)
 class Enemy():
@@ -213,7 +238,7 @@ class Game():
 	##Call every frame
 	def onUpdate(self):
 
-
+		start = time.time()
 		##render image
 		self.onRender()
 		##change buffers
@@ -223,8 +248,9 @@ class Game():
 
 		else:
 			self.currentBuffer = 0;
-		self.main.after(1000,self.onUpdate)
 
+		print(time.time()-start)
+		self.main.after(1,self.onUpdate)
 	def onRender(self):
 		self.renderer.setBuffer(self.buffers[self.currentBuffer])
 		self.renderer.renderIndices(self.m)
